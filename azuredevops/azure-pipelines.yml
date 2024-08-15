@@ -1,0 +1,109 @@
+# Specify the trigger event to start the build pipeline.
+trigger:
+  branches:
+    include:
+    - staging
+    - release
+
+variables:
+- group: databricks-batch
+
+# Specify the operating system for the agent that runs on the Azure virtual
+# machine for the build pipeline (known as the build agent). The virtual
+# machine image in this example uses the Ubuntu 22.04 virtual machine
+# image in the Azure Pipeline agent pool. See
+# https://learn.microsoft.com/azure/devops/pipelines/agents/hosted#software
+pool:
+  vmImage: ubuntu-22.04
+
+# Download the files from the designated branch in the remote Git repository
+# onto the build agent.
+steps:
+- checkout: self
+  persistCredentials: true
+  clean: true
+
+# Generate the deployment artifact. To do this, the build agent gathers
+# all the new or updated code to be given to the release pipeline,
+# including the sample Python code, the Python notebooks,
+# the Python wheel library component files, and the related Databricks asset
+# bundle settings.
+# Use git diff to flag files that were added in the most recent Git merge.
+# Then add the files to be used by the release pipeline.
+# The implementation in your pipeline will likely be different.
+# The objective here is to add all files intended for the current release.
+- script: |
+    git diff --name-only --diff-filter=AMR HEAD^1 HEAD | xargs -I '{}' cp --parents -r '{}' $(Build.BinariesDirectory)
+    cp -r $(Build.Repository.LocalPath)/* $(Build.BinariesDirectory)
+  displayName: 'Get Changes'
+
+# Create the deployment artifact and then publish it to the
+# artifact repository.
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(Build.BinariesDirectory)'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+    replaceExistingArchive: true
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    ArtifactName: 'DatabricksBuild'
+
+- task: UsePythonVersion@0
+  displayName: 'Use Python 3.10'
+  inputs:
+    versionSpec: 3.10
+  
+- task: ExtractFiles@1
+  displayName: 'Extract files '
+  inputs:
+    destinationFolder: '$(Release.PrimaryArtifactSourceAlias)/Databricks'
+
+- task: Bash@3
+  env:
+    DATABRICKS_HOST: $(DATABRICKS_HOST)
+    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+  inputs:
+    targetType: 'inline'
+    script: |
+      echo "Install Requirements"
+      curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+      echo "Define Target"
+      if [ $(Build.SourceBranchName) = "release" ]; then  
+        target='prod'  
+      elif [ $(Build.SourceBranchName) = "staging" ]; then  
+        target='test'  
+      else  
+        target='dev'  
+      fi  
+      echo "Validate Bundle"
+      databricks bundle validate 
+      echo "Cleanup Existing"
+      databricks bundle destroy --auto-approve -t "$target"
+      echo "Deploy Bundle"
+      databricks bundle deploy -t "$target"
+    workingDirectory: '$(Release.PrimaryArtifactSourceAlias)/Databricks'
+
+- task: Bash@3
+  env:
+    DATABRICKS_HOST: $(DATABRICKS_HOST)
+    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+  inputs:
+    targetType: 'inline'
+    script: |
+      echo "Setup Environment"
+      databricks bundle run prepare -t "$target"
+    workingDirectory: '$(Release.PrimaryArtifactSourceAlias)/Databricks'
+
+- task: Bash@3
+  env:
+    DATABRICKS_HOST: $(DATABRICKS_HOST)
+    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+  inputs:
+    targetType: 'inline'
+    script: |
+      echo "Run Inference Pipeline"
+      databricks bundle run score -t "$target"
+    workingDirectory: '$(Release.PrimaryArtifactSourceAlias)/Databricks'
