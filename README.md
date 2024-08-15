@@ -3,10 +3,15 @@ This is a template repository for predictive models that will need to be loaded 
 It provides template notebooks for using user credentials the same way as the batch account, and has som validation code to test outputs. It also provides code to initialize schemas and migrate data when moving between dev, staging, and production.
 
 o	This template has two important yml files (and I’m currently on the update_datascope_version branch)
+
 o	databricks.yml, which can control what jobs are configured, and its behavior can changed based on the target (databricks bundle -t <target> …)
+
 o	.azuredevops/azure-pipelines.yml, which calls the bundle from azure devops using the databricks cli (it calls it with different ‘targets’ if it is a pr to staging vs release)
+
 o	Authentication is set in this library variable group: Library - Pipelines (azure.com) 
-o	The following are notable items in the template repo ''
+
+
+o	The following are notable items in the template repo 
     	/model_name/inference/score template
       •	 Shell of scoring code that defines constants, credentials to be used in the pipeline
       •	Unit tests at the end that make sure the table could be loaded to the CBDW_MBR_PRDCT_MODEL table
