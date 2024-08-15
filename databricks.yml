@@ -1,0 +1,109 @@
+bundle:
+  name: <model_name>-bundle
+
+variables:
+  job_prefix:
+    description: A unifying prefix for this bundle's job and task names.
+    default: <model-name>
+  spark_version:
+    description: The cluster's Spark version ID.
+    default: 13.3.x-cpu-ml-scala2.12
+  node_type_id:
+    description: The cluster's node type ID.
+    default: Standard_DS3_v2
+
+resources:
+  jobs:
+    prepare:
+      name: ${var.job_prefix}-prepare
+      tasks:
+        - task_key: ${var.job_prefix}-prepare
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: 1
+          notebook_task:
+            notebook_path: ./<model_name>/setup/prepare_environments.py
+            source: WORKSPACE
+      permissions:
+       - group_name: AZ_DtbrkDSCoEdtScntst44_P
+         level: CAN_VIEW
+    train:
+      name: ${var.job_prefix}-train
+      tasks:
+        - task_key: ${var.job_prefix}-train
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: 1
+            spark_env_vars:
+              WORKSPACEBUNDLEPATH: ${workspace.root_path}
+          notebook_task:
+            notebook_path: ./<model_name>/training/train.py
+            source: WORKSPACE
+      permissions:
+       - group_name: AZ_DtbrkDSCoEdtScntst44_P
+         level: CAN_VIEW
+    score:
+      name: ${var.job_prefix}-inference
+      tasks:
+        - task_key: ${var.job_prefix}-score
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: 1
+          notebook_task:
+            notebook_path: ./<model_name>/inference/score.py
+            source: WORKSPACE
+      permissions:
+       - group_name: AZ_DtbrkDSCoEdtScntst44_P
+         level: CAN_VIEW          
+    test:
+      name: ${var.job_prefix}-test
+      tasks:
+        - task_key: ${var.job_prefix}-test
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: 1
+          notebook_task:
+            notebook_path: ./tests/unit_tests.py
+            source: WORKSPACE
+      permissions:
+       - group_name: AZ_DtbrkDSCoEdtScntst44_P
+         level: CAN_VIEW          
+         
+targets:
+  dev:
+    default: true
+    mode: development
+  test:
+    resources:
+      jobs:
+        score:
+          name: ${var.job_prefix}-inference
+          parameters:
+            - name: environment
+              default: TEST
+        prepare:
+          name: ${var.job_prefix}-prepare
+          parameters:
+          - name: environment
+            default: TEST
+  prod:
+    resources:
+      jobs:
+        prepare:
+          name: ${var.job_prefix}-prepare
+          parameters:
+          - name: environment
+            default: PRODUCTION
+        score:
+          name: ${var.job_prefix}-inference
+          parameters:
+          - name: environment
+            default: PRODUCTION
+          schedule:
+            quartz_cron_expression: 24 0 5 ? * Thu
+            timezone_id: America/New_York
+            pause_status: UNPAUSED

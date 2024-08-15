@@ -1,0 +1,21 @@
+{
+  "model-metadata": {
+    "name": "TEST01",
+    "description": "A model that estimates the probability of a member having/being diagnosed with type II diabetes in the next 12 months.",
+    "outputs":[
+      {
+        "key": 1,
+        "class": "OUTCOME",
+        "code": "PROB",
+        "description": "PROBABILITY OF DIABETES"
+      },
+      {
+        "key": 2,
+        "class": "DRIVER",
+        "code": "DRIVER1",
+        "description": "PROBABILITY DRIVER"
+      }
+    ]
+  }
+}
+
